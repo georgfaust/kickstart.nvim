@@ -33,6 +33,8 @@ require('lazy').setup({
   -- Detect tabstop and shiftwidth automatically
   'tpope/vim-sleuth',
 
+  'onsails/lspkind.nvim',
+
   -- NOTE: This is where your plugins related to LSP can be installed.
   --  The configuration is done below. Search for lspconfig to find it below.
   {
@@ -138,6 +140,7 @@ require('lazy').setup({
       pcall(require('nvim-treesitter.install').update { with_sync = true })
     end,
   },
+  { 'NvChad/nvim-colorizer.lua' },
 
   -- NOTE: Next Step on Your Neovim Journey: Add/Configure additional "plugins" for kickstart
   --       These are some example plugins that I've included in the kickstart repository.
@@ -208,6 +211,9 @@ vim.keymap.set({ 'n', 'v' }, '<Space>', '<Nop>', { silent = true })
 vim.keymap.set('n', 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true })
 vim.keymap.set('n', 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true })
 
+-- 
+vim.api.nvim_create_user_command('Cdb', ':cd %:p:h', {})
+
 -- [[ Highlight on yank ]]
 -- See `:help vim.highlight.on_yank()`
 local highlight_group = vim.api.nvim_create_augroup('YankHighlight', { clear = true })
@@ -230,6 +236,34 @@ require('telescope').setup {
       },
     },
   },
+}
+
+require("colorizer").setup {
+  filetypes = { "*" },
+  user_default_options = {
+    RGB = true,              -- #RGB hex codes
+    RRGGBB = true,           -- #RRGGBB hex codes
+    names = true,            -- "Name" codes like Blue or blue
+    RRGGBBAA = false,        -- #RRGGBBAA hex codes
+    AARRGGBB = false,        -- 0xAARRGGBB hex codes
+    rgb_fn = false,          -- CSS rgb() and rgba() functions
+    hsl_fn = false,          -- CSS hsl() and hsla() functions
+    css = false,             -- Enable all CSS features: rgb_fn, hsl_fn, names, RGB, RRGGBB
+    css_fn = false,          -- Enable all CSS *functions*: rgb_fn, hsl_fn
+    -- Available modes for `mode`: foreground, background,  virtualtext
+    mode = "background",     -- Set the display mode.
+    -- Available methods are false / true / "normal" / "lsp" / "both"
+    -- True is same as normal
+    tailwind = true,                                     -- Enable tailwind colors
+    -- parsers can contain values used in |user_default_options|
+    sass = { enable = false, parsers = { "css" }, },     -- Enable sass colors
+    virtualtext = "■",
+    -- update color values even if buffer is not focused
+    -- example use: cmp_menu, cmp_docs
+    always_update = false
+  },
+  -- all the sub-options of filetypes apply to buftypes
+  buftypes = {},
 }
 
 -- Enable telescope fzf native, if installed
@@ -382,6 +416,10 @@ local servers = {
   -- rust_analyzer = {},
   -- tsserver = {},
 
+
+  -- TODO The root directory detection is configurable. Try adding this to your tailwind server options, maybe below filetypes:
+  -- root_dir = lspconfig.util.root_pattern('tailwind.config.js', 'tailwind.config.ts', 'postcss.config.js', 'postcss.config.ts', 'package.json', 'node_modules', '.git', 'mix.exs'),
+
   tailwindcss = {
     filetypes = { "html", "elixir", "eelixir", "heex" },
     init_options = {
@@ -443,6 +481,7 @@ local luasnip = require 'luasnip'
 
 luasnip.config.setup {}
 
+local lspkind = require('lspkind')
 cmp.setup {
   snippet = {
     expand = function(args)
@@ -480,6 +519,38 @@ cmp.setup {
     { name = 'nvim_lsp' },
     { name = 'luasnip' },
   },
+  formatting = {
+    fields = { "kind", "abbr", "menu" },
+    format = lspkind.cmp_format({
+      mode = 'symbol_text', -- options: 'text', 'text_symbol', 'symbol_text', 'symbol'
+      maxwidth = 50,        -- prevent the popup from showing more than provided characters (e.g 50 will not show more than 50 characters)
+      menu = ({             -- showing type in menu
+        nvim_lsp = "[LSP]",
+        path = "[Path]",
+        buffer = "[Buffer]",
+        luasnip = "[LuaSnip]",
+      }),
+      before = function(entry, vim_item) -- for tailwind css autocomplete
+        if vim_item.kind == 'Color' and entry.completion_item.documentation then
+          local _, _, r, g, b = string.find(entry.completion_item.documentation, '^rgb%((%d+), (%d+), (%d+)')
+          if r then
+            local color = string.format('%02x', r) .. string.format('%02x', g) .. string.format('%02x', b)
+            local group = 'Tw_' .. color
+            if vim.fn.hlID(group) < 1 then
+              vim.api.nvim_set_hl(0, group, { fg = '#' .. color })
+            end
+            vim_item.kind = "■" -- or "⬤" or anything
+            vim_item.kind_hl_group = group
+            return vim_item
+          end
+        end
+        -- vim_item.kind = icons[vim_item.kind] and (icons[vim_item.kind] .. vim_item.kind) or vim_item.kind
+        -- or just show the icon
+        vim_item.kind = lspkind.symbolic(vim_item.kind) and lspkind.symbolic(vim_item.kind) or vim_item.kind
+        return vim_item
+      end
+    })
+  }
 }
 
 -- The line beneath this is called `modeline`. See `:help modeline`
